@@ -1,23 +1,28 @@
-FROM jelastic/nodejs:10.16.3-forever
+FROM jelastic/nodejs:10.16.3-forever as builder
 
-WORKDIR /data/server
+ARG appname
+ENV APP_NAME $appname
+
+WORKDIR /${APP_NAME}
 
 COPY package.json package-lock.json ./
 # install deps
-# RUN npm set strict-ssl false
+RUN npm set strict-ssl false
 RUN npm install
 
 # build
 COPY . ./
-RUN npm run build
+# RUN npm run build
 
 FROM nginx:1.15
 
-WORKDIR /data/server
+ARG appname
+ENV APP_NAME $appname
+
+WORKDIR /${APP_NAME}
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
-COPY --from=builder /dist .
+COPY --from=builder /$APP_NAME/dist .
 
 ENV POD_PORT "80"
 
-CMD ["sh", "-c", "/etc/nginx/nginx.conf \
-     && nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "nginx -g 'daemon off;'"]

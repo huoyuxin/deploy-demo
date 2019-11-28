@@ -2,49 +2,50 @@
 kind: Ingress
 apiVersion: extensions/v1beta1
 metadata:
-  name: $APP_NAME
-  namespace: $NAMESPACE
+  name: deploy-demo
+  namespace: demo
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   rules:
-    - host: $HOST
+    - host: demo.deploy
       http:
         paths:
-          - path: /$APP_NAME(/|$)(.*)
+          - path: /deploy-demo(/|$)(.*)
             backend:
-              serviceName: $APP_NAME
+              serviceName: deploy-demo
               servicePort: http
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: $APP_NAME
-  namespace: $NAMESPACE
+  name: deploy-demo
+  namespace: demo
   labels:
-    app: $APP_NAME
+    app: deploy-demo
 spec:
   type: ClusterIP
   selector:
-    app: $APP_NAME
+    app: deploy-demo
   ports:
     - name: http
-      port: $POD_PORT
-      targetPort: $POD_PORT
+      port: 80
+      targetPort: 80
       protocol: TCP
 ---
 apiVersion: apps/v1
+# 无状态
 kind: Deployment
 metadata:
-  name: $APP_NAME
-  namespace: $NAMESPACE
+  name: deploy-demo
+  namespace: demo
 spec:
-  replicas: $REPLICAS
+  replicas: 2
   revisionHistoryLimit: 10
   minReadySeconds: 3
   selector:
     matchLabels:
-      app: $APP_NAME
+      app: deploy-demo
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -53,13 +54,13 @@ spec:
   template:
     metadata:
       labels:
-        app: $APP_NAME
+        app: deploy-demo
     spec:
       containers:
-        - image: $IMAGE_NAME
-          name: $APP_NAME
+        - image: mingyuanxiaoshui/deploy-demo:1
+          name: deploy-demo
           ports:
-            - containerPort: $POD_PORT
+            - containerPort: 80
               name: http
               protocol: TCP
           env:
@@ -67,20 +68,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-          # readinessProbe:
-          #   tcpSocket:
-          #     port: $POD_PORT
-          #   initialDelaySeconds: 5
-          #   periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
           # livenessProbe:
           #   tcpSocket:
-          #     port: $POD_PORT
+          #     port: 80
           #   initialDelaySeconds: 15
           #   periodSeconds: 20
-          # resources:
-          #   requests:
-          #     cpu: $CPU
-          #     memory: $MEM
-          #   limits:
-          #     cpu: $CPU
-          #     memory: $MEM

@@ -1,4 +1,6 @@
 #!groovy
+    def NAMESPACE = "demo"
+    def APP_NAME='deploy-demo'; // 必需跟项目打包后的目录一致，同时也是http访问目录
     def POD_PORT='31301'
     def APP_TYPE='h5'
     def GROUP='airpay'
@@ -7,37 +9,36 @@ properties([
     parameters([
         // 增加子项目名称，如 
         // choice(name: 'APP_NAME', choices: ['sub1', 'sub2'], description: '子项目'),
-        choice(name: 'APP_NAME', choices: [], description: '子项目'),
-        gitParameter(branch: '',
-            branchFilter: 'origin/(release(.*)|dev|test|uat|master|hotfix(.*))',
-            defaultValue: 'test',
-            description: 'remote git branch and tag',
-            name: 'REVISION',
-            quickFilterEnabled: false,
-            selectedValue: 'DEFAULT',
-            sortMode: 'DESCENDING_SMART',
-            tagFilter: '*',
-            listSize: '20',
-            type: 'PT_BRANCH_TAG'),
-        choice(choices: ['test', 'uat', 'live'], description: '部署环境', name: 'ENV'),
+        // choice(name: 'APP_NAME', choices: [], description: '子项目'),
+        // gitParameter(branch: '',
+        //     branchFilter: 'origin/(release(.*)|dev|test|uat|master|hotfix(.*))',
+        //     defaultValue: 'test',
+        //     description: 'remote git branch and tag',
+        //     name: 'REVISION',
+        //     quickFilterEnabled: false,
+        //     selectedValue: 'DEFAULT',
+        //     sortMode: 'DESCENDING_SMART',
+        //     tagFilter: '*',
+        //     listSize: '20',
+        //     type: 'PT_BRANCH_TAG'),
+        // choice(choices: ['test', 'uat', 'live'], description: '部署环境', name: 'ENV'),
         string(defaultValue: '3', description: '副本数', name: 'REPLICAS'),
-        choice(choices: ['th', 'vn'], description: '国家', name: 'REGION')
+        // choice(choices: ['th', 'vn'], description: '国家', name: 'REGION')
     ])
 ])
 
-node ('slave') {
-    def APP_NAME=params.APP_NAME; // 必需跟项目打包后的目录一致，同时也是http访问目录
-    def ENVIRONMENT = params.ENV;
-    def REGION = params.REGION;
+node ('master') {
     def REPLICAS = params.REPLICAS;
-    if(ENVIRONMENT == 'dev' || ENVIRONMENT == 'test' || ENVIRONMENT == 'uat'){
-        REPLICAS='1'
-        CPU='0.2'
-        MEM='0.5'
-    }else{
-        CPU='2'
-        MEM='4'
-    }
+    // def  CPU='2'
+    // def  MEM='4'
+    // if(ENVIRONMENT == 'dev' || ENVIRONMENT == 'test' || ENVIRONMENT == 'uat'){
+    //     REPLICAS='1'
+    //     CPU='0.2'
+    //     MEM='0.5'
+    // }else{
+    //     CPU='2'
+    //     MEM='4'
+    // }
 
     if(Integer.valueOf(REPLICAS) > 20) {
         error "REPLICAS out of limit"
@@ -46,7 +47,6 @@ node ('slave') {
     println scm.userRemoteConfigs
 
     def myRepo = checkout([$class                           : 'GitSCM',
-                           branches                         : [[name: "${params.REVISION}"]],
                            doGenerateSubmoduleConfigurations: false,
                            extensions                       : [],
                            gitTool                          : 'Default',
@@ -55,33 +55,34 @@ node ('slave') {
     ])
     def gitCommit = myRepo.GIT_COMMIT
     def gitBranch = myRepo.GIT_BRANCH
-    def NAMESPACE = "${APP_TYPE}-frontend-${REGION}-${ENVIRONMENT}"
     def shortGitCommit = "${gitCommit[0..10]}"
     def previousGitCommit = sh(script: "git rev-parse ${gitCommit}~", returnStdout: true)
     // 根据环境设置域名
-    def HOST = ""
-    if(REGION == "th") {
-        HOST = "h5.airpay.in.th"
-        if(ENVIRONMENT == 'test'){
-           HOST = "h5.test.airpay.in.th"
-        }else if(ENVIRONMENT == 'uat'){
-           HOST = "h5.uat.airpay.in.th"
-        }
-    } else if (REGION == "vn") {
-        HOST = "h5.airpay.vn"
-        if (ENVIRONMENT == 'test') {
-           HOST = "h5.test.airpay.vn"
-        } else if (ENVIRONMENT == 'uat') {
-           HOST = "h5.uat.airpay.vn"
-        }
-    }
-    def REGISTRY_CRED='harbor-airpay-dev'
-    def BUILD_TAG = "${ENVIRONMENT}-git-${shortGitCommit}"
-    def IMAGE_NAME = "harbor.shopeemobile.com/${GROUP}/${ENVIRONMENT}/${APP_NAME}:${BUILD_TAG}"
+    def HOST = "demo.deploy"
+    // if(REGION == "th") {
+    //     HOST = "h5.airpay.in.th"
+    //     if(ENVIRONMENT == 'test'){
+    //        HOST = "h5.test.airpay.in.th"
+    //     }else if(ENVIRONMENT == 'uat'){
+    //        HOST = "h5.uat.airpay.in.th"
+    //     }
+    // } else if (REGION == "vn") {
+    //     HOST = "h5.airpay.vn"
+    //     if (ENVIRONMENT == 'test') {
+    //        HOST = "h5.test.airpay.vn"
+    //     } else if (ENVIRONMENT == 'uat') {
+    //        HOST = "h5.uat.airpay.vn"
+    //     }
+    // }
+
+    // ?????
+    def REGISTRY_CRED='mingyuanxiaoshui'
+    def BUILD_TAG = "git-${shortGitCommit}"
+    def IMAGE_NAME = "https://hub.docker.com/repository/docker/mingyuanxiaoshui/${APP_NAME}:${BUILD_TAG}"
 
     stage('Build') {
-        def customImage = docker.build("${IMAGE_NAME}", "--build-arg env=${ENVIRONMENT} --build-arg region=${REGION} --build-arg appname=${APP_NAME} -f deploy/Dockerfile .")
-        docker.withRegistry('https://harbor.shopeemobile.com', "${REGISTRY_CRED}") {
+        def customImage = docker.build("${IMAGE_NAME}", "--build-arg appname=${APP_NAME} -f deploy/Dockerfile .")
+        docker.withRegistry('https://hub.docker.com', "${REGISTRY_CRED}") {
             customImage.push()
         }
     }
@@ -90,28 +91,23 @@ node ('slave') {
         sh """
            sed -i 's#\$APP_NAME#$APP_NAME#g
                    s#\$POD_PORT#$POD_PORT#g
-                   s#\$APP_TYPE#$APP_TYPE#g
                    s#\$NAMESPACE#$NAMESPACE#g
-                   s#\$ENVIRONMENT#$ENVIRONMENT#g
-                   s#\$REGION#$REGION#g
                    s#\$REPLICAS#$REPLICAS#g
                    s#\$IMAGE_NAME#$IMAGE_NAME#g
-                   s#\$CPU#${CPU}#g
-                   s#\$MEM#${MEM}Gi#g
                    s#\$HOST#${HOST}#g
                   '  deploy/deploy.yml
            """
     }
 
     stage('Deploy'){
-        kubernetesDeploy(kubeconfigId: "${ENVIRONMENT}-${REGION}-kubeconfig",
+        kubernetesDeploy(kubeconfigId: "kubeconfig",
                          configs: 'deploy/*.yml',
                          enableConfigSubstitution: true,
         )
     }
 
     stage('Poll Status') {
-        withCredentials([kubeconfigContent(credentialsId: "${ENVIRONMENT}-${REGION}-kubeconfig",
+        withCredentials([kubeconfigContent(credentialsId: "kubeconfig",
                                            variable: 'kubeconfig')]) {
             sh """#!/bin/bash
                mkdir -p ~/.kube && echo "$kubeconfig" > ~/.kube/config
